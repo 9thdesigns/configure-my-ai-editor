@@ -147,6 +147,8 @@ src/lib/*.js           pure modules, shared with the renderer and unit-tested
 renderer/src/*.js      the UI: editor groups, explorer, sessions, GitHub,
                        terminal, quick open, settings (esbuild → renderer/dist)
 scripts/build.js       the esbuild bundle
+scripts/make-icon.py   draws build/icon.png: the Configure My AI avatar
+                       holding a notepad (build/mark.svg is the brand mark)
 electron-builder.yml   packaging, artifact names, publish target
 .github/workflows      CI (build, test, check) and Release (tag → installers)
 ```
