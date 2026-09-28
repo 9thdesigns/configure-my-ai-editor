@@ -1,0 +1,156 @@
+# Tag → installers → GitHub Release. The desktop app's workflow, with the
+# editor's names; see that repository's release.yml for the long version of
+# every comment here.
+#
+# Push a tag like v0.1.0 and this builds the macOS DMGs (Apple Silicon +
+# Intel, plus the zips electron-updater applies), the Windows NSIS
+# installers (x64 + ARM64) and the Linux packages (an Arch/Omarchy .pacman
+# and a portable AppImage), then publishes them to a single GitHub Release.
+#
+# Signing is driven by repository secrets and optional on every platform:
+#
+#   CSC_LINK / CSC_KEY_PASSWORD                     macOS Developer ID .p12
+#   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID   notarization
+#   WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD             Windows Authenticode .pfx
+#
+# With none set the builds are unsigned (ad-hoc on macOS): they run, with a
+# one-time Gatekeeper / SmartScreen prompt. Linux packages are never signed;
+# electron-updater verifies each update against latest-linux.yml.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create_release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Pre-create the release exactly once so the three build jobs only ever
+      # UPLOAD into it. Idempotent on a re-run.
+      - name: Ensure the release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${{ steps.ver.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists."
+          else
+            echo "Creating release $tag at $GITHUB_SHA."
+            gh release create "$tag" \
+              --title "$tag" \
+              --notes "Configure My AI Editor $tag" \
+              --target "$GITHUB_SHA"
+          fi
+
+  mac:
+    needs: create_release
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+      - run: npm run check
+
+      # An empty CSC_LINK is mis-read by electron-builder as a certificate
+      # PATH, so branch explicitly: sign when a certificate is present,
+      # otherwise unset the empties for a clean ad-hoc build.
+      - name: Build and publish macOS DMGs
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            echo "Developer ID certificate present — signing."
+            npx electron-builder --mac --publish always
+          else
+            echo "No signing certificate — building an unsigned (ad-hoc) release."
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            npx electron-builder --mac --publish always
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+  windows:
+    needs: create_release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+      - run: npm run check
+
+      # Only the Windows-specific WIN_CSC_* secrets are exposed here — never
+      # the Apple CSC_LINK — so electron-builder can't mistake the macOS
+      # certificate for a Windows one.
+      - name: Build and publish Windows installers
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+  linux:
+    needs: create_release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # fpm's pacman target shells out to bsdtar; Ubuntu ships it as
+      # libarchive-tools.
+      - name: Install pacman packaging tools
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+      - run: npm run check
+
+      - name: Build and publish Linux packages
+        run: npx electron-builder --linux --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

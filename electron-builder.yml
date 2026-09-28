@@ -1,0 +1,134 @@
+# Build + packaging for the editor (macOS, Windows + Linux/Omarchy) — the same
+# shape as the desktop app's electron-builder.yml, with the editor's own
+# names, so anyone who has shipped one can ship the other.
+#
+# Artifact names are a wire contract with whatever links to them (the site's
+# download page, the README): the `latest/download/<name>` URLs stay stable
+# across versions only while the names below do not change. The `Editor`
+# segment keeps these clear of the desktop app's assets, which live in a
+# different repository but read the same on a download page.
+#
+#   .../releases/latest/download/ConfigureMyAIEditor-arm64.dmg          (macOS Apple Silicon)
+#   .../releases/latest/download/ConfigureMyAIEditor-x64.dmg            (macOS Intel)
+#   .../releases/latest/download/ConfigureMyAIEditor-win-x64.exe        (Windows x64)
+#   .../releases/latest/download/ConfigureMyAIEditor-win-arm64.exe      (Windows ARM64)
+#   .../releases/latest/download/ConfigureMyAIEditor-linux-x64.pacman   (Arch / Omarchy)
+#   .../releases/latest/download/ConfigureMyAIEditor-linux-x64.AppImage (any Linux)
+
+appId: com.configuremyai.editor
+productName: Configure My AI Editor
+copyright: © 9th Designs
+
+directories:
+  buildResources: build
+  output: dist
+
+# renderer/dist is the esbuild output (npm run build); every packaging script
+# in package.json builds first, so a stale bundle never ships.
+files:
+  - src/**/*
+  - renderer/index.html
+  - renderer/dist/**/*
+  - package.json
+
+# node-pty is the one native module. electron-builder rebuilds it for the
+# bundled Electron on `install-app-deps` (postinstall) and again at package
+# time, and unpacks it from the asar so its spawn helper can be executed.
+asarUnpack:
+  - node_modules/node-pty/**
+
+# Runs after each arch is packaged. For unsigned builds it ad-hoc signs the
+# .app so Apple Silicon will launch it (an entirely unsigned app reads as
+# "damaged"); for signed builds it stands aside. See build/afterPack.js.
+afterPack: build/afterPack.js
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.png
+  darkModeSupport: true
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  artifactName: "ConfigureMyAIEditor-${arch}.${ext}"
+  # dmg is what people download; zip is what electron-updater applies.
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+
+# Notarization runs automatically when APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD
+# and APPLE_TEAM_ID are present in the environment (the release workflow
+# passes them through from repository secrets), and is skipped when absent.
+
+win:
+  icon: build/icon.png
+  artifactName: "ConfigureMyAIEditor-win-${arch}.${ext}"
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+
+nsis:
+  # A per-user, one-click installer — no admin prompt, no install-location
+  # step. This is also what makes silent in-app auto-update possible: a
+  # per-machine install would need elevation on every update.
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+
+linux:
+  icon: build/icon.png
+  # `configure-my-ai-editor` is the binary, the .desktop file and — via
+  # desktopName in package.json + syncDesktopName — the Wayland app_id / X11
+  # WM_CLASS, so the launcher, the dock and Hyprland window rules
+  # (`windowrule = ..., class:configure-my-ai-editor`) all agree on one name.
+  executableName: configure-my-ai-editor
+  syncDesktopName: true
+  category: Development
+  synopsis: A lightweight editor with a Configure My AI Code session at its side
+  description: Configure My AI Editor — edit files, run a terminal, and drive a Configure My AI Code session in one window.
+  maintainer: 9th Designs <support@configuremyai.com>
+  desktop:
+    entry:
+      Name: Configure My AI Editor
+      GenericName: Text Editor
+      Keywords: editor;code;ai;terminal;configure;
+      MimeType: text/plain;inode/directory;
+  target:
+    - target: pacman
+      arch: [x64]
+    - target: AppImage
+      arch: [x64]
+
+pacman:
+  artifactName: "ConfigureMyAIEditor-linux-x64.${ext}"
+  # electron-builder's default pacman depends list names packages Arch no
+  # longer ships and would make `pacman -U` refuse the install. Electron
+  # bundles its own Chromium; these are the system libraries it loads.
+  depends:
+    - gtk3
+    - nss
+    - alsa-lib
+    - libnotify
+    - libxss
+    - libxtst
+    - libsecret
+    - at-spi2-core
+    - xdg-utils
+
+appImage:
+  artifactName: "ConfigureMyAIEditor-linux-x64.${ext}"
+
+publish:
+  provider: github
+  owner: 9thdesigns
+  repo: configure-my-ai-editor
+  # Upload into an existing PUBLISHED release. The workflow's "Ensure the
+  # release exists" step pre-creates it, so electron-builder never calls
+  # POST /releases and there is no create to race on across the three
+  # platform jobs — the desktop app's fix, carried over verbatim.
+  releaseType: release

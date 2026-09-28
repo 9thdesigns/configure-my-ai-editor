@@ -1,0 +1,33 @@
+# Fast sanity on every push: the lockfile installs, the renderer bundles, the
+# unit tests pass and every main-process file parses. Real packaging is
+# exercised by release.yml on tags.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # The Electron binary is ~100MB and irrelevant to a parse check. The
+      # node-pty rebuild (postinstall) only needs Electron's headers.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
+
+      - run: npm run check
