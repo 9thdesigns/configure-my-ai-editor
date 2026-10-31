@@ -20,7 +20,7 @@
     "watch": "node scripts/build.js --watch",
     "start": "npm run build && electron .",
     "check": "node scripts/check.js",
-    "test": "node --test \"test/*.test.js\"",
+    "test": "node --test test/*.test.js",
     "pack": "npm run build && electron-builder --mac --dir",
     "pack:win": "npm run build && electron-builder --win --dir",
     "pack:linux": "npm run build && electron-builder --linux --dir",

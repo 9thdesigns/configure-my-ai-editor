@@ -21,6 +21,7 @@ const fs = require('node:fs')
 const { TITLEBAR_HEIGHT, PANEL_PARTITION, serverOrigin, tagUserAgent } = require('./config')
 const { captionSide, isTilingWindowManager } = require('./lib/window-chrome')
 const { isWebUrl } = require('./lib/url-policy')
+const { guardIpc } = require('./lib/ipc-guard')
 const windowState = require('./window-state')
 const updater = require('./updater')
 const { installMenu } = require('./menu')
@@ -240,6 +241,11 @@ function refreshMenu () {
 // ── IPC ───────────────────────────────────────────────────────────────────────
 
 function registerIpc () {
+  // Before any handler: privileged channels answer the editor's renderer only.
+  guardIpc(ipcMain, {
+    getMainContents: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
+    rendererIndexPath: path.join(__dirname, '..', 'renderer', 'index.html'),
+  })
   ipcMain.on('app:info', (event) => {
     event.returnValue = {
       platform: process.platform,

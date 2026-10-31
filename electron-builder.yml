@@ -132,3 +132,16 @@ publish:
   # POST /releases and there is no create to race on across the three
   # platform jobs — the desktop app's fix, carried over verbatim.
   releaseType: release
+
+# Electron fuses, flipped in the packaged binary (electron-builder applies
+# them before signing). RunAsNode / NODE_OPTIONS / --inspect would let anything
+# that can launch the app run arbitrary Node with its entitlements (mic, the
+# signed-in session); asar-only + integrity stops a swapped app.asar. Cookie
+# encryption is left off on purpose: turning it on migrates the cookie store
+# and signs every existing user out once — a release-note decision.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
