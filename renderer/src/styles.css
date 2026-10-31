@@ -368,3 +368,24 @@ button.statusbar__item:hover { background: var(--bg-3); color: var(--ink); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ── AI-state motion (shared vocabulary with the web app) ─────────────────
+   Live status labels shimmer, loading lists show skeletons. Both are
+   transform/opacity only: a gradient sheen slides across with translateX
+   instead of animating background-position, so it stays on the compositor. */
+.ai-shimmer { position: relative; overflow: hidden; color: var(--accent); }
+.ai-shimmer::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg-2) 70%, transparent), transparent);
+  transform: translateX(-100%); animation: ai-sheen 1.6s ease-in-out infinite;
+}
+@keyframes ai-sheen { to { transform: translateX(100%); } }
+.session--skeleton { pointer-events: none; }
+.skel { height: 9px; border-radius: 4px; background: var(--bg-3); animation: skel 1.4s ease-in-out infinite; }
+.skel--title { width: 70%; margin-bottom: 6px; }
+.skel--meta { width: 45%; height: 7px; }
+@keyframes skel { 50% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  .ai-shimmer::after { display: none; }
+}
