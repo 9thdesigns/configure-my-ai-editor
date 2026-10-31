@@ -78,6 +78,15 @@ export class SessionsPane {
     }
 
     const list = h('div', { class: 'sessions' })
+    // Skeleton rows while the first fetch is in flight, so the pane keeps its
+    // shape instead of popping from empty to full.
+    if (s.sessions.length === 0 && s.loading) {
+      for (let i = 0; i < 4; i++) {
+        list.append(h('div', { class: 'session session--skeleton', 'aria-hidden': 'true' },
+          h('span', { class: 'session__dot' }),
+          h('div', { class: 'session__main' }, h('div', { class: 'skel skel--title' }), h('div', { class: 'skel skel--meta' }))))
+      }
+    }
     if (s.sessions.length === 0 && !s.loading) {
       list.append(h('div', { class: 'pane__empty' },
         h('p', {}, 'No sessions yet.'),
@@ -96,7 +105,7 @@ export class SessionsPane {
         h('div', { class: 'session__title' }, session.title),
         h('div', { class: 'session__meta' },
           session.repository ? h('span', { class: 'session__repo' }, session.repository.full_name) : null,
-          h('span', { class: 'session__status' }, statusLabel(session.status)),
+          h('span', { class: `session__status ${live ? 'ai-shimmer' : ''}`, role: live ? 'status' : null }, statusLabel(session.status)),
           h('span', { class: 'session__time' }, relativeTime(session.last_activity_at)),
         ),
       ),
